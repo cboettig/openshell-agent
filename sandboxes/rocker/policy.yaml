@@ -1,6 +1,6 @@
-# OpenShell sandbox policy.
+# OpenShell sandbox policy for the rocker sandbox.
 #
-#   openshell sandbox create --from ./sandbox-current-claude --policy ./sandbox-policy.yaml
+#   openshell sandbox create --from ./sandboxes/rocker --policy ./sandboxes/rocker/policy.yaml
 #
 # This is the built-in default policy (captured from a live sandbox on 2026-09-07,
 # openshell 0.0.116) plus the claude_code changes noted below. Passing --policy REPLACES
@@ -29,6 +29,12 @@
 #     /sandbox/.local/bin/claude             a self-update writes here: HOME for the sandbox
 #     /sandbox/.local/share/claude/**        user is /sandbox, and /usr is read-only at
 #                                            runtime, so an in-place update relocates.
+#
+# Added for this image:
+#
+#   cran                      R is the reason for the base image; install.packages() and
+#                             remotes::install_github() need somewhere to fetch from.
+#   pypi /opt/venv/bin/*      rocker keeps its Python in /opt/venv, not /sandbox/.venv.
 #
 # Deliberately still denied: http-intake.logs.us5.datadoghq.com (optional telemetry, was
 # failing harmlessly). `tls: terminate` was dropped throughout -- it is the default now and
@@ -137,6 +143,30 @@ network_policies:
       port: 443
     - host: release-assets.githubusercontent.com
       port: 443
+  cran:
+    name: cran
+    binaries:
+    - path: /usr/lib/R/bin/exec/R
+    - path: /usr/bin/R
+    - path: /usr/bin/Rscript
+    - path: /usr/lib/R/bin/Rscript
+    endpoints:
+    - host: cloud.r-project.org
+      port: 443
+    - host: cran.r-project.org
+      port: 443
+    - host: p3m.dev
+      port: 443
+    - host: packagemanager.posit.co
+      port: 443
+    - host: github.com
+      port: 443
+    - host: api.github.com
+      port: 443
+    - host: objects.githubusercontent.com
+      port: 443
+    - host: codeload.github.com
+      port: 443
   cursor:
     name: cursor
     binaries:
@@ -214,6 +244,10 @@ network_policies:
     - path: /app/.venv/bin/pip
     - path: /usr/local/bin/uv
     - path: /sandbox/.uv/python/**
+    - path: /opt/venv/bin/python
+    - path: /opt/venv/bin/python3
+    - path: /opt/venv/bin/pip
+    - path: /opt/venv/bin/uv
     endpoints:
     - host: pypi.org
       port: 443
@@ -248,4 +282,3 @@ network_policies:
 process:
   run_as_group: sandbox
   run_as_user: sandbox
-

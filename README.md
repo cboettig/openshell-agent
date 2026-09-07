@@ -1,13 +1,18 @@
 # openshell-agent
 
-An [OpenShell](https://github.com/nvidia/openshell) sandbox with a current Claude Code in
-it, a network policy that lets it stay current, and shell helpers for getting in and out.
+Our standard [OpenShell](https://github.com/nvidia/openshell) sandbox: R, Python and CUDA
+from [rocker/ml](https://rocker-project.org), a current Claude Code, a network policy that
+lets it stay current, and shell helpers for getting in and out.
 
-| file | what it is |
+Sandboxes follow the upstream
+[community](https://github.com/NVIDIA/OpenShell-Community) layout — one directory per
+sandbox holding a `Dockerfile` and a `policy.yaml`:
+
+| path | what it is |
 | --- | --- |
+| `sandboxes/rocker/Dockerfile` | rocker/ml + Claude Code + the supervisor's prerequisites |
+| `sandboxes/rocker/policy.yaml` | network/filesystem policy; replaces the built-in default |
 | `aliases.sh` | the `os` / `osl` shell helpers |
-| `sandbox-current-claude/Dockerfile` | community base image + a current Claude Code |
-| `sandbox-policy.yaml` | sandbox network/filesystem policy; replaces the built-in default |
 
 ## Setup
 
@@ -35,8 +40,8 @@ running, stopped, or doesn't exist yet. The equivalent raw commands:
 # pick its own default shell; anything after `--` becomes the main process.
 openshell sandbox create \
   --name   dev \
-  --from   ./sandbox-current-claude \
-  --policy ./sandbox-policy.yaml \
+  --from   ./sandboxes/rocker \
+  --policy ./sandboxes/rocker/policy.yaml \
   [-- claude]
 
 # already running (phase Ready) -- attach to the existing main process
@@ -59,15 +64,24 @@ losing the workspace, including the Claude Code login.
 
 ## Why a derived image
 
-`ghcr.io/nvidia/openshell-community/sandboxes/base:latest` was last built 2026-05-29 and
-has not been rebuilt since — `latest` and the newest tag `fffb6b2` are the same digest. It
-ships Claude Code 2.1.156, which predates Opus 5, so the model picker tops out at Opus 4.8.
-Pulling cannot fix this; `sandbox-current-claude/` installs over it at build time, where
-egress is unrestricted.
+`rocker/ml` gives us the R, Python and CUDA stack we actually work in, but it is not an
+OpenShell base image and ships no Claude Code. `sandboxes/rocker/Dockerfile` adds three
+things: the supervisor's prerequisites (`iproute2`, `nftables`, `iptables`, `dnsutils`,
+`openssh-sftp-server` — without them netns bring-up degrades and bypass detection cannot
+install), the `sandbox` and `supervisor` users the privilege drop targets, and Node 22
+with a current Claude Code.
 
-`sandbox-policy.yaml` separately unblocks `downloads.claude.ai` so `claude update` also
+It also overrides rocker's `HOME=/home/jovyan`. Left alone that beats the passwd entry, and
+Claude Code writes its credential somewhere the sandbox user cannot write and that is not
+part of the persisted workspace.
+
+The upstream community base is not an option: it was last built 2026-05-29 and has not been
+rebuilt since — `latest` and the newest tag `fffb6b2` are the same digest — so it ships
+Claude Code 2.1.156, which predates Opus 5.
+
+`policy.yaml` separately unblocks `downloads.claude.ai` so `claude update` also
 works from *inside* a running sandbox. Without it the native updater fails silently, and
-the only trace is `~/.claude/.last-update-result.json`:
+the only trace is `$HOME/.claude/.last-update-result.json`:
 
 ```json
 {"path":"native","outcome":"failed","status":"install_failed",
@@ -83,7 +97,7 @@ new install is denied at the proxy.
 
 A sandbox binds to its image, its supervisor binary, and its policy when it is **created**,
 and never re-resolves any of them. Neither `docker pull`, nor upgrading the `openshell`
-package, nor editing `sandbox-policy.yaml` affects a sandbox that already exists —
+package, nor editing `policy.yaml` affects a sandbox that already exists —
 `sandbox stop`/`start` reuses the same container. Only a fresh `sandbox create` picks up
 new versions. Treat sandboxes as disposable and keep state in the workspace.
 
@@ -98,9 +112,12 @@ openshell --version
 openshell policy get <sandbox> --base -o json
 
 # 3. rebuild and recreate
-docker pull ghcr.io/nvidia/openshell-community/sandboxes/base:latest
+docker pull rocker/ml:latest
 openshell sandbox delete dev && os
 ```
+
+Adding a sandbox means a new `sandboxes/<name>/` with its own `Dockerfile` and
+`policy.yaml`; point `os` at it with `--from`/`--policy`, or set `OPENSHELL_SANDBOX`.
 
 ## Auth
 

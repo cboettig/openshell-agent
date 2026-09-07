@@ -18,6 +18,8 @@
 
 # Where this repo lives; override to point at a checkout elsewhere.
 OPENSHELL_AGENT_DIR="${OPENSHELL_AGENT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+# Which sandboxes/<name> to build from. One directory per sandbox, upstream's layout.
+OPENSHELL_SANDBOX="${OPENSHELL_SANDBOX:-rocker}"
 
 openshell-session() {
     local name=dev
@@ -35,8 +37,8 @@ openshell-session() {
             # No args -> no `--`, so openshell picks its own default shell.
             openshell sandbox create \
                 --name   "$name" \
-                --from   "$OPENSHELL_AGENT_DIR/sandbox-current-claude" \
-                --policy "$OPENSHELL_AGENT_DIR/sandbox-policy.yaml" \
+                --from   "$OPENSHELL_AGENT_DIR/sandboxes/$OPENSHELL_SANDBOX" \
+                --policy "$OPENSHELL_AGENT_DIR/sandboxes/$OPENSHELL_SANDBOX/policy.yaml" \
                 ${1+--} "$@"
             ;;
         *)
