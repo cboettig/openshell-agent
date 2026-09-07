@@ -67,9 +67,15 @@ losing the workspace, including the Claude Code login.
 `rocker/ml` gives us the R, Python and CUDA stack we actually work in, but it is not an
 OpenShell base image and ships no Claude Code. `sandboxes/rocker/Dockerfile` adds three
 things: the supervisor's prerequisites (`iproute2`, `nftables`, `iptables`, `dnsutils`,
-`openssh-sftp-server` — without them netns bring-up degrades and bypass detection cannot
-install), the `sandbox` and `supervisor` users the privilege drop targets, and Node 22
-with a current Claude Code.
+`openssh-sftp-server` — the supervisor shells out to `ip` and `nft` to build the sandbox
+network namespace, and `sftp-server` backs `sandbox upload`/`download`), the `sandbox` and
+`supervisor` users the privilege drop targets, and Node 22 with a current Claude Code.
+
+A `CONFIG:DEGRADED — Failed to install bypass detection rules` warning at startup is
+**host-side, not image-side**: the `nft ... reject with icmp type port-unreachable` rule
+needs `nft_reject_inet` loaded on the host. Upstream's base image hits it too. It is
+non-fatal — proxy enforcement is unaffected, only the diagnostic that flags direct
+connection attempts. Clear it with `sudo modprobe nft_reject_inet`.
 
 It also overrides rocker's `HOME=/home/jovyan`. Left alone that beats the passwd entry, and
 Claude Code writes its credential somewhere the sandbox user cannot write and that is not
