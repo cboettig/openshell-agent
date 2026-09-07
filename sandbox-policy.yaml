@@ -1,0 +1,251 @@
+# OpenShell sandbox policy.
+#
+#   openshell sandbox create --from ./sandbox-current-claude --policy ./sandbox-policy.yaml
+#
+# This is the built-in default policy (captured from a live sandbox on 2026-09-07,
+# openshell 0.0.116) plus the claude_code changes noted below. Passing --policy REPLACES
+# the built-in default outright, so everything else here is reproduced verbatim -- when
+# you upgrade openshell, re-capture with:
+#
+#   openshell policy get <sandbox> --base -o json
+#
+# and diff, so upstream additions to the default don't silently go missing.
+#
+# Changes vs. the stock default, all in claude_code:
+#
+#   endpoints
+#     downloads.claude.ai       version manifest + native binary. Its absence is why the
+#                               sandbox was pinned at Claude Code 2.1.156 (Opus 4.8) --
+#                               every `claude update` was DENIED at the proxy.
+#     mcp-proxy.anthropic.com   MCP connectors; was denied in a tight retry loop.
+#     registry.npmjs.org        the npm-install path for `claude update`.
+#
+#   binaries
+#     /usr/bin/claude                        npm prefix here is /usr, so `npm install -g`
+#                                            lands the launcher at /usr/bin, not /usr/local.
+#     /usr/lib/node_modules/@anthropic-ai/** the native binary npm unpacks -- it, not node,
+#                                            is what the proxy sees exec'ing. Mirrors how
+#                                            the stock policy handles @openai and @github.
+#     /sandbox/.local/bin/claude             a self-update writes here: HOME for the sandbox
+#     /sandbox/.local/share/claude/**        user is /sandbox, and /usr is read-only at
+#                                            runtime, so an in-place update relocates.
+#
+# Deliberately still denied: http-intake.logs.us5.datadoghq.com (optional telemetry, was
+# failing harmlessly). `tls: terminate` was dropped throughout -- it is the default now and
+# only produced a CONFIG:VALIDATED warning on every boot.
+
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only:
+  - /usr
+  - /lib
+  - /proc
+  - /dev/urandom
+  - /app
+  - /etc
+  - /var/log
+  read_write:
+  - /sandbox
+  - /tmp
+  - /dev/null
+landlock:
+  compatibility: best_effort
+network_policies:
+  claude_code:
+    name: claude-code
+    binaries:
+    - path: /usr/local/bin/claude
+    - path: /usr/bin/node
+    - path: /usr/bin/claude
+    - path: /usr/lib/node_modules/@anthropic-ai/**
+    - path: /sandbox/.local/bin/claude
+    - path: /sandbox/.local/share/claude/**
+    endpoints:
+    - host: api.anthropic.com
+      port: 443
+      protocol: rest
+      access: full
+      enforcement: enforce
+    - host: statsig.anthropic.com
+      port: 443
+    - host: sentry.io
+      port: 443
+    - host: raw.githubusercontent.com
+      port: 443
+    - host: platform.claude.com
+      port: 443
+    - host: downloads.claude.ai
+      port: 443
+    - host: mcp-proxy.anthropic.com
+      port: 443
+    - host: registry.npmjs.org
+      port: 443
+  codex:
+    name: codex
+    binaries:
+    - path: /usr/bin/codex
+    - path: /usr/bin/node
+    - path: /usr/lib/node_modules/@openai/**
+    endpoints:
+    - host: api.openai.com
+      port: 443
+    - host: auth.openai.com
+      port: 443
+    - host: chatgpt.com
+      port: 443
+  copilot:
+    name: copilot
+    binaries:
+    - path: /usr/bin/copilot
+    - path: /usr/lib/node_modules/@github/copilot/node_modules/@github/**/copilot
+    endpoints:
+    - host: github.com
+      port: 443
+    - host: api.github.com
+      port: 443
+    - host: api.githubcopilot.com
+      port: 443
+      protocol: rest
+      access: read-write
+      enforcement: enforce
+    - host: api.individual.githubcopilot.com
+      port: 443
+      protocol: rest
+      access: read-write
+      enforcement: enforce
+    - host: api.business.githubcopilot.com
+      port: 443
+      protocol: rest
+      access: read-write
+      enforcement: enforce
+    - host: api.enterprise.githubcopilot.com
+      port: 443
+      protocol: rest
+      access: read-write
+      enforcement: enforce
+    - host: copilot-proxy.githubusercontent.com
+      port: 443
+      protocol: rest
+      access: read-write
+      enforcement: enforce
+    - host: origin-tracker.githubusercontent.com
+      port: 443
+    - host: telemetry.enterprise.githubcopilot.com
+      port: 443
+    - host: default.exp-tas.com
+      port: 443
+    - host: release-assets.githubusercontent.com
+      port: 443
+  cursor:
+    name: cursor
+    binaries:
+    - path: /usr/bin/curl
+    - path: /usr/bin/wget
+    - path: /sandbox/.cursor-server/**
+    endpoints:
+    - host: cursor.blob.core.windows.net
+      port: 443
+    - host: api2.cursor.sh
+      port: 443
+    - host: repo.cursor.sh
+      port: 443
+    - host: download.cursor.sh
+      port: 443
+    - host: cursor.download.prss.microsoft.com
+      port: 443
+  github_rest_api:
+    name: github-rest-api
+    binaries:
+    - path: /usr/local/bin/claude
+    - path: /usr/bin/gh
+    endpoints:
+    - host: api.github.com
+      port: 443
+      protocol: rest
+      access: read-only
+      enforcement: enforce
+  github_ssh_over_https:
+    name: github-ssh-over-https
+    binaries:
+    - path: /usr/bin/git
+    endpoints:
+    - host: github.com
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          path: /**/info/refs*
+          method: GET
+      - allow:
+          path: /**/git-upload-pack
+          method: POST
+  nvidia_inference:
+    name: nvidia-inference
+    binaries:
+    - path: /usr/bin/curl
+    - path: /bin/bash
+    - path: /usr/local/bin/opencode
+    endpoints:
+    - host: integrate.api.nvidia.com
+      port: 443
+  opencode:
+    name: opencode
+    binaries:
+    - path: /usr/lib/node_modules/opencode-ai/bin/.opencode
+    - path: /usr/bin/node
+    - path: /usr/local/bin/opencode
+    endpoints:
+    - host: registry.npmjs.org
+      port: 443
+    - host: opencode.ai
+      port: 443
+    - host: integrate.api.nvidia.com
+      port: 443
+  pypi:
+    name: pypi
+    binaries:
+    - path: /sandbox/.venv/bin/python
+    - path: /sandbox/.venv/bin/python3
+    - path: /sandbox/.venv/bin/pip
+    - path: /app/.venv/bin/python
+    - path: /app/.venv/bin/python3
+    - path: /app/.venv/bin/pip
+    - path: /usr/local/bin/uv
+    - path: /sandbox/.uv/python/**
+    endpoints:
+    - host: pypi.org
+      port: 443
+    - host: files.pythonhosted.org
+      port: 443
+    - host: github.com
+      port: 443
+    - host: objects.githubusercontent.com
+      port: 443
+    - host: api.github.com
+      port: 443
+    - host: downloads.python.org
+      port: 443
+  vscode:
+    name: vscode
+    binaries:
+    - path: /usr/bin/curl
+    - path: /usr/bin/wget
+    - path: /sandbox/.vscode-server/**
+    - path: /sandbox/.vscode-remote-containers/**
+    endpoints:
+    - host: update.code.visualstudio.com
+      port: 443
+    - host: az764295.vo.msecnd.net
+      port: 443
+    - host: vscode.download.prss.microsoft.com
+      port: 443
+    - host: marketplace.visualstudio.com
+      port: 443
+    - host: gallerycdn.vsassets.io
+      port: 443
+process:
+  run_as_group: sandbox
+  run_as_user: sandbox
+
