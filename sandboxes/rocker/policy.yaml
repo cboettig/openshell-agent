@@ -36,6 +36,25 @@
 #                             remotes::install_github() need somewhere to fetch from.
 #   pypi /opt/venv/bin/*      rocker keeps its Python in /opt/venv, not /sandbox/.venv.
 #
+# github.com / api.github.com are L7 read-only (GET+HEAD) in cran, pypi and copilot rather
+# than the stock bare host:port. Two reasons, both measured on 0.0.116:
+#
+#   1. A bare host:port entry is an UNINSPECTED L4 tunnel. Attach any provider that
+#      carries a GitHub credential and `sandbox create` refuses outright:
+#        credentialed endpoint 'github.com:443' in rule 'cran' uses L4-only;
+#        configure L7 inspection or explicitly set allow_uninspected_credentials: true
+#      An L4 tunnel is exactly where a credential leaves without the proxy seeing it, so
+#      the fix is inspection, never the allow_uninspected_credentials escape hatch.
+#
+#   2. github.com:443 is ONE credential domain per sandbox. Overlapping endpoints for the
+#      same host:port must agree on credential_binding or the gateway rejects the policy:
+#        network policies 'gh-ops-record' endpoint[1] (github.com:443) and 'cran'
+#        endpoint[4] (github.com:443) overlap on port(s) 443 with conflicting metadata
+#      So you cannot let git push carry a token while remotes::install_github() goes
+#      unauthenticated. A sandbox that WRITES to GitHub under a scoped token must drop
+#      github.com from cran/pypi entirely -- which is why writing and computing belong in
+#      separate sandboxes. Read-only here keeps this sandbox on the computing side.
+#
 # Deliberately still denied: http-intake.logs.us5.datadoghq.com (optional telemetry, was
 # failing harmlessly). `tls: terminate` was dropped throughout -- it is the default now and
 # only produced a CONFIG:VALIDATED warning on every boot.
@@ -108,8 +127,20 @@ network_policies:
     endpoints:
     - host: github.com
       port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
     - host: api.github.com
       port: 443
+      protocol: rest
+      access: read-only
+      enforcement: enforce
     - host: api.githubcopilot.com
       port: 443
       protocol: rest
@@ -161,8 +192,20 @@ network_policies:
       port: 443
     - host: github.com
       port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
     - host: api.github.com
       port: 443
+      protocol: rest
+      access: read-only
+      enforcement: enforce
     - host: objects.githubusercontent.com
       port: 443
     - host: codeload.github.com
@@ -255,10 +298,22 @@ network_policies:
       port: 443
     - host: github.com
       port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
     - host: objects.githubusercontent.com
       port: 443
     - host: api.github.com
       port: 443
+      protocol: rest
+      access: read-only
+      enforcement: enforce
     - host: downloads.python.org
       port: 443
   vscode:
