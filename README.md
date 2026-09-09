@@ -120,7 +120,7 @@ to `/usr/lib/node_modules/@anthropic-ai/claude-code/bin/claude.exe`, a **native*
 the stock allowlist's `/usr/bin/node` does not cover it, and without a matching entry the
 new install is denied at the proxy.
 
-## Everything is pinned at create time
+## The image is pinned at create time; the policy is not
 
 A sandbox binds to its image and its supervisor binary when it is **created**, and never
 re-resolves either. Neither `docker pull` nor upgrading the `openshell` package affects a
