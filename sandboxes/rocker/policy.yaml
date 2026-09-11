@@ -39,6 +39,13 @@
 # github.com / api.github.com are L7 read-only (GET+HEAD) in cran, pypi and copilot rather
 # than the stock bare host:port. Two reasons, both measured on 0.0.116:
 #
+# The same applies to GitHub's content hosts -- raw/objects/release-assets/origin-tracker
+# .githubusercontent.com and codeload.github.com -- which serve private-repo tarballs and
+# raw files and therefore accept a GitHub token. All are GET+HEAD. Verified that L7 does
+# not truncate binaries: an R download.file() of a codeload tarball arrives as valid gzip
+# and unpacks. (telemetry.enterprise.githubcopilot.com is left L4 on purpose: it takes a
+# Copilot credential, not a GitHub one, and we do not use Copilot.)
+#
 #   1. A bare host:port entry is an UNINSPECTED L4 tunnel. Attach any provider that
 #      carries a GitHub credential and `sandbox create` refuses outright:
 #        credentialed endpoint 'github.com:443' in rule 'cran' uses L4-only;
@@ -98,6 +105,15 @@ network_policies:
       port: 443
     - host: raw.githubusercontent.com
       port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
     - host: platform.claude.com
       port: 443
     - host: downloads.claude.ai
@@ -168,12 +184,30 @@ network_policies:
       enforcement: enforce
     - host: origin-tracker.githubusercontent.com
       port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
     - host: telemetry.enterprise.githubcopilot.com
       port: 443
     - host: default.exp-tas.com
       port: 443
     - host: release-assets.githubusercontent.com
       port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
   cran:
     name: cran
     binaries:
@@ -208,8 +242,26 @@ network_policies:
       enforcement: enforce
     - host: objects.githubusercontent.com
       port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
     - host: codeload.github.com
       port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
   cursor:
     name: cursor
     binaries:
@@ -309,6 +361,15 @@ network_policies:
           path: '**'
     - host: objects.githubusercontent.com
       port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
     - host: api.github.com
       port: 443
       protocol: rest
