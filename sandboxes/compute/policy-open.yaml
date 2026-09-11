@@ -1,0 +1,200 @@
+# OPEN flavor of the compute sandbox policy -- same image, package egress restored.
+#
+#   # start a sandbox in the open flavor
+#   openshell sandbox create --from ./sandboxes/compute --policy ./sandboxes/compute/policy-open.yaml
+#
+#   # or widen a RUNNING sandbox, then put it back when done
+#   openshell policy set <sandbox> --policy ./sandboxes/compute/policy-open.yaml --wait
+#   openshell policy set <sandbox> --policy ./sandboxes/compute/policy.yaml      --wait
+#
+# policy.yaml is the default and should stay that way: the image is meant to be complete,
+# and fetching a package at runtime means running its configure/build scripts as the
+# sandbox user. This file exists so that widening is a deliberate, visible, reversible act
+# rather than a standing permission -- reach for it when you are genuinely exploring and
+# do not yet know the dependencies, then rebuild the image with what you found.
+#
+# Adds over policy.yaml: cran (CRAN, P3M, and GitHub source installs) and pypi. The
+# GitHub content hosts here are L7 GET+HEAD, not bare L4 -- see the header of
+# sandboxes/rocker/policy.yaml for why that matters.
+
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only:
+  - /usr
+  - /lib
+  - /proc
+  - /dev/urandom
+  - /app
+  - /etc
+  - /var/log
+  - /opt
+  read_write:
+  - /sandbox
+  - /tmp
+  - /dev/null
+landlock:
+  compatibility: best_effort
+network_policies:
+  claude_code:
+    name: claude-code
+    binaries:
+    - path: /usr/local/bin/claude
+    - path: /usr/bin/node
+    - path: /usr/bin/claude
+    - path: /usr/lib/node_modules/@anthropic-ai/**
+    - path: /sandbox/.local/bin/claude
+    - path: /sandbox/.local/share/claude/**
+    endpoints:
+    - host: api.anthropic.com
+      port: 443
+      protocol: rest
+      access: full
+      enforcement: enforce
+    - host: statsig.anthropic.com
+      port: 443
+    - host: sentry.io
+      port: 443
+    - host: raw.githubusercontent.com
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
+    - host: platform.claude.com
+      port: 443
+    - host: downloads.claude.ai
+      port: 443
+    - host: mcp-proxy.anthropic.com
+      port: 443
+    - host: registry.npmjs.org
+      port: 443
+  github_ssh_over_https:
+    name: github-clone-readonly
+    binaries:
+    - path: /usr/bin/git
+    endpoints:
+    - host: github.com
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          path: /**/info/refs*
+          method: GET
+      - allow:
+          path: /**/git-upload-pack
+          method: POST
+  cran:
+    name: cran
+    binaries:
+    - path: /usr/lib/R/bin/exec/R
+    - path: /usr/bin/R
+    - path: /usr/bin/Rscript
+    - path: /usr/lib/R/bin/Rscript
+    endpoints:
+    - host: cloud.r-project.org
+      port: 443
+    - host: cran.r-project.org
+      port: 443
+    - host: p3m.dev
+      port: 443
+    - host: packagemanager.posit.co
+      port: 443
+    - host: bioconductor.org
+      port: 443
+    - host: github.com
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
+    - host: api.github.com
+      port: 443
+      protocol: rest
+      access: read-only
+      enforcement: enforce
+    - host: objects.githubusercontent.com
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
+    - host: codeload.github.com
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
+  pypi:
+    name: pypi
+    binaries:
+    - path: /sandbox/.venv/bin/python
+    - path: /sandbox/.venv/bin/python3
+    - path: /sandbox/.venv/bin/pip
+    - path: /app/.venv/bin/python
+    - path: /app/.venv/bin/python3
+    - path: /app/.venv/bin/pip
+    - path: /usr/local/bin/uv
+    - path: /sandbox/.uv/python/**
+    - path: /opt/venv/bin/python
+    - path: /opt/venv/bin/python3
+    - path: /opt/venv/bin/pip
+    - path: /opt/venv/bin/uv
+    endpoints:
+    - host: pypi.org
+      port: 443
+    - host: files.pythonhosted.org
+      port: 443
+    - host: github.com
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
+    - host: objects.githubusercontent.com
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
+    - host: api.github.com
+      port: 443
+      protocol: rest
+      access: read-only
+      enforcement: enforce
+    - host: downloads.python.org
+      port: 443
+process:
+  run_as_group: sandbox
+  run_as_user: sandbox

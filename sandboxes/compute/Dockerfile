@@ -51,7 +51,22 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 #    image's ENV, so rocker's PATH and VIRTUAL_ENV do not survive and its Python
 #    is reachable only at its full path. A profile.d drop-in is read by the
 #    shell itself, so it does survive.
-RUN printf 'export PATH=/opt/venv/bin:$PATH\nexport VIRTUAL_ENV=/opt/venv\n' \
+#    A writable venv under /sandbox layered on rocker's, so pip has somewhere to
+#    install: /opt is read-only, and without this `pip install` downloads the wheel
+#    and then dies on EACCES. --system-site-packages keeps every preinstalled
+#    package visible. The path is /sandbox/.venv because the stock policy already
+#    allowlists /sandbox/.venv/bin/{python,pip} as pypi binaries.
+#    Note --system-site-packages is not enough on its own: /opt/venv is itself a
+#    venv whose `home = /usr/bin`, so a child venv's "system" resolves to /usr and
+#    rocker's packages stay invisible. The .pth appends them explicitly, after the
+#    local site-packages, so a locally installed package shadows the image's.
+RUN python3 -m venv --system-site-packages /sandbox/.venv \
+    && SP="$(/sandbox/.venv/bin/python3 -c 'import site; print(site.getsitepackages()[0])')" \
+    && /opt/venv/bin/python3 -c 'import site; print(site.getsitepackages()[0])' \
+         > "$SP/00-rocker-venv.pth" \
+    && chown -R sandbox:sandbox /sandbox/.venv
+
+RUN printf 'export PATH=/sandbox/.venv/bin:/opt/venv/bin:$PATH\nexport VIRTUAL_ENV=/sandbox/.venv\n' \
       > /etc/profile.d/10-rocker-venv.sh \
     && chmod 0644 /etc/profile.d/10-rocker-venv.sh
 
