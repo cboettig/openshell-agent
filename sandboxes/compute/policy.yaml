@@ -1,0 +1,112 @@
+# OpenShell policy for the "compute" sandbox.
+#
+#   openshell sandbox create --from ./sandboxes/compute --policy ./sandboxes/compute/policy.yaml
+#
+# Same base as sandboxes/rocker/policy.yaml, with the package-fetch egress removed.
+# That is the whole posture: the image is complete, so nothing here needs CRAN, PyPI,
+# or a GitHub tarball, and the install-time arbitrary-code-execution surface that comes
+# with them does not exist. Add a package by rebuilding the image, not by opening a host.
+#
+# Dropped relative to sandboxes/rocker:
+#   cran, pypi          the package-fetch endpoints, and with them R's github.com /
+#                       codeload / objects.githubusercontent.com access -- the path
+#                       remotes::install_github() uses to fetch a tarball and run its
+#                       configure script as the sandbox user.
+#   codex, copilot,     unused agents. Each was standing egress for a tool we do not
+#   cursor, vscode,     run; an allowlist entry that is never exercised is only a way
+#   opencode,           in. Re-add from sandboxes/rocker if one is ever adopted.
+#   nvidia_inference
+#   github_rest_api     read-only api.github.com for gh/claude. Not needed for compute;
+#                       see the credential notes in the README before re-adding, since
+#                       github.com:443 is one credential domain per sandbox.
+#
+# Kept:
+#   claude_code             the agent itself, and its updater.
+#   github_ssh_over_https   GET info/refs + POST git-upload-pack, i.e. clone and fetch
+#                           only. The info/refs wildcard is broad enough to permit the
+#                           receive-pack *advertisement*, but the POST that carries the
+#                           pack is not allowed, so nothing can be pushed from here --
+#                           a push fails before it sends. This is the one deliberate
+#                           egress beyond Anthropic:
+#                           the analysis code has to get in somehow. Drop it and use
+#                           `openshell sandbox upload` if you want Anthropic-only.
+#
+# /opt is read_only so rocker's Python at /opt/venv is executable; see the note in
+# sandboxes/rocker/policy.yaml for why it is not read_write.
+
+version: 1
+filesystem_policy:
+  include_workdir: true
+  read_only:
+  - /usr
+  - /lib
+  - /proc
+  - /dev/urandom
+  - /app
+  - /etc
+  - /var/log
+  - /opt
+  read_write:
+  - /sandbox
+  - /tmp
+  - /dev/null
+landlock:
+  compatibility: best_effort
+network_policies:
+  claude_code:
+    name: claude-code
+    binaries:
+    - path: /usr/local/bin/claude
+    - path: /usr/bin/node
+    - path: /usr/bin/claude
+    - path: /usr/lib/node_modules/@anthropic-ai/**
+    - path: /sandbox/.local/bin/claude
+    - path: /sandbox/.local/share/claude/**
+    endpoints:
+    - host: api.anthropic.com
+      port: 443
+      protocol: rest
+      access: full
+      enforcement: enforce
+    - host: statsig.anthropic.com
+      port: 443
+    - host: sentry.io
+      port: 443
+    - host: raw.githubusercontent.com
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          method: GET
+          path: '**'
+      - allow:
+          method: HEAD
+          path: '**'
+    - host: platform.claude.com
+      port: 443
+    - host: downloads.claude.ai
+      port: 443
+    - host: mcp-proxy.anthropic.com
+      port: 443
+    - host: registry.npmjs.org
+      port: 443
+  github_ssh_over_https:
+    name: github-clone-readonly
+    binaries:
+    - path: /usr/bin/git
+    endpoints:
+    - host: github.com
+      port: 443
+      protocol: rest
+      enforcement: enforce
+      rules:
+      - allow:
+          path: /**/info/refs*
+          method: GET
+      - allow:
+          path: /**/git-upload-pack
+          method: POST
+process:
+  run_as_group: sandbox
+  run_as_user: sandbox

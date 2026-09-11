@@ -1,0 +1,72 @@
+# OpenShell "compute" sandbox: the geospatial stack, preinstalled, with no
+# package-fetch egress at runtime.
+#
+#   openshell sandbox create --from ./sandboxes/compute --policy ./sandboxes/compute/policy.yaml
+#
+# The difference from sandboxes/rocker is posture, not contents. There, an agent
+# installs what it needs at runtime, which means CRAN, PyPI and github.com are
+# reachable and a package's configure script runs arbitrary code as the sandbox
+# user. Here everything is expected to be in the image already, so policy.yaml
+# grants no package-fetch endpoints at all and that surface does not exist.
+#
+# rocker/ml-spatial is the base precisely so there is no package list to keep:
+# it already carries the R/Python geospatial stack (GDAL, PROJ, GEOS, sf, terra,
+# stars) on top of rocker/ml's R + Python + CUDA. When something is genuinely
+# missing, add it HERE and rebuild -- that is the intended friction, and it is
+# also where r2u still works, since these layers run as root.
+FROM rocker/ml-spatial:latest
+
+USER root
+ENV DEBIAN_FRONTEND=noninteractive
+
+# 1. Supervisor prerequisites. Not optional: the supervisor shells out to `ip`
+#    and `nft` to build the sandbox network namespace and `sftp-server` backs
+#    upload/download. A stock rocker image without these dies during
+#    provisioning with ContainerExited -- measured, not assumed.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl dnsutils iproute2 iptables nftables \
+        iputils-ping net-tools netcat-openbsd openssh-sftp-server \
+        procps traceroute \
+    && rm -rf /var/lib/apt/lists/*
+
+# 2. The users the supervisor drops privileges to. `run_as_user` accepts the
+#    literal name `sandbox` or a numeric uid >= 1 -- never 0, so nothing in this
+#    sandbox can be root, and `no_new_privs` is set besides. sudo and apt are
+#    therefore unavailable at runtime by design, which is why installation
+#    belongs in the layers above.
+RUN groupadd -r supervisor \
+    && useradd -r -g supervisor -s /usr/sbin/nologin supervisor \
+    && groupadd -r sandbox \
+    && useradd -r -g sandbox -d /sandbox -s /bin/bash sandbox \
+    && mkdir -p /sandbox && chown sandbox:sandbox /sandbox
+
+# 3. Node 22 and a current Claude Code, as in sandboxes/rocker.
+RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g @anthropic-ai/claude-code@latest \
+    && rm -rf /var/lib/apt/lists/* \
+    && claude --version
+
+# 4. OpenShell builds a fresh environment for exec'd processes and discards the
+#    image's ENV, so rocker's PATH and VIRTUAL_ENV do not survive and its Python
+#    is reachable only at its full path. A profile.d drop-in is read by the
+#    shell itself, so it does survive.
+RUN printf 'export PATH=/opt/venv/bin:$PATH\nexport VIRTUAL_ENV=/opt/venv\n' \
+      > /etc/profile.d/10-rocker-venv.sh \
+    && chmod 0644 /etc/profile.d/10-rocker-venv.sh
+
+# 5. Runtime R settings. bspm routes install.packages() through `sudo apt-get`
+#    for r2u binaries, which cannot work here (no root, no_new_privs), so turn
+#    it off rather than let it fail confusingly. R_LIBS_USER points at the
+#    writable workspace so an ad-hoc install has somewhere to land -- it simply
+#    has nowhere to fetch from, which is the point.
+RUN printf '\n# OpenShell: no root at runtime, so r2u/apt is unavailable.\noptions(bspm.sudo = FALSE)\n' \
+      >> /usr/lib/R/etc/Rprofile.site \
+    && printf 'R_LIBS_USER=/sandbox/R/library\n' >> /usr/lib/R/etc/Renviron.site \
+    && mkdir -p /sandbox/R/library && chown -R sandbox:sandbox /sandbox/R
+
+# HOME is taken from the passwd entry above; this is belt-and-braces for any
+# path that does read the image ENV.
+ENV HOME=/sandbox
+WORKDIR /sandbox
+USER sandbox
