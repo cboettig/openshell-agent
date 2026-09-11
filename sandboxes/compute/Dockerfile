@@ -3,11 +3,11 @@
 #
 #   openshell sandbox create --from ./sandboxes/compute --policy ./sandboxes/compute/policy.yaml
 #
-# The difference from sandboxes/rocker is posture, not contents. There, an agent
-# installs what it needs at runtime, which means CRAN, PyPI and github.com are
-# reachable and a package's configure script runs arbitrary code as the sandbox
-# user. Here everything is expected to be in the image already, so policy.yaml
-# grants no package-fetch endpoints at all and that surface does not exist.
+# The posture: everything is expected to be in the image already, so policy.yaml
+# grants no package-fetch endpoints at all. Installing at runtime would mean CRAN,
+# PyPI and github.com reachable and a package's configure script running arbitrary
+# code as the sandbox user; policy-open.yaml restores that deliberately when you are
+# still discovering dependencies, and it works on a running sandbox.
 #
 # rocker/ml-spatial is the base precisely so there is no package list to keep:
 # it already carries the R/Python geospatial stack (GDAL, PROJ, GEOS, sf, terra,
@@ -40,7 +40,9 @@ RUN groupadd -r supervisor \
     && useradd -r -g sandbox -d /sandbox -s /bin/bash sandbox \
     && mkdir -p /sandbox && chown sandbox:sandbox /sandbox
 
-# 3. Node 22 and a current Claude Code, as in sandboxes/rocker.
+# 3. Node 22 and a current Claude Code. npm's prefix here is /usr, so the launcher
+#    lands at /usr/bin/claude -- resolving to a native claude.exe under
+#    /usr/lib/node_modules/@anthropic-ai/, which policy.yaml allowlists explicitly.
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && npm install -g @anthropic-ai/claude-code@latest \

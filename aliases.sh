@@ -24,7 +24,7 @@
 # Where this repo lives; override to point at a checkout elsewhere.
 OPENSHELL_AGENT_DIR="${OPENSHELL_AGENT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # Which sandboxes/<name> to build from. One directory per sandbox, upstream's layout.
-OPENSHELL_SANDBOX="${OPENSHELL_SANDBOX:-rocker}"
+OPENSHELL_SANDBOX="${OPENSHELL_SANDBOX:-compute}"
 
 # Attach to a running sandbox. Deliberately NOT `openshell sandbox connect`:
 # connect reattaches to the sandbox's canonical main process, and if that

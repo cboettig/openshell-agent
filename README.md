@@ -10,9 +10,20 @@ sandbox holding a `Dockerfile` and a `policy.yaml`:
 
 | path | what it is |
 | --- | --- |
-| `sandboxes/rocker/Dockerfile` | rocker/ml + Claude Code + the supervisor's prerequisites |
-| `sandboxes/rocker/policy.yaml` | network/filesystem policy; replaces the built-in default |
+| `sandboxes/compute/Dockerfile` | rocker/ml-spatial + Claude Code + the supervisor's prerequisites |
+| `sandboxes/compute/policy.yaml` | the **locked** flavor, and the default: Anthropic plus clone-only GitHub |
+| `sandboxes/compute/policy-open.yaml` | the **open** flavor: same image, CRAN and PyPI restored |
 | `aliases.sh` | the `os` / `osl` shell helpers |
+
+One image, two flavors. The image is meant to be complete, so the default policy grants
+no package-fetch egress at all; the open flavor restores it for when you are still
+discovering dependencies. Flavor is a `--policy` choice, and `openshell policy set` can
+switch a **running** sandbox between them:
+
+```bash
+openshell policy set dev --policy ./sandboxes/compute/policy-open.yaml --wait   # widen
+openshell policy set dev --policy ./sandboxes/compute/policy.yaml      --wait   # and back
+```
 
 ## Setup
 
@@ -40,8 +51,8 @@ running, stopped, or doesn't exist yet. The equivalent raw commands:
 # pick its own default shell; anything after `--` becomes the main process.
 openshell sandbox create \
   --name   dev \
-  --from   ./sandboxes/rocker \
-  --policy ./sandboxes/rocker/policy.yaml \
+  --from   ./sandboxes/compute \
+  --policy ./sandboxes/compute/policy.yaml \
   --tty \
   [-- claude]
 
@@ -85,12 +96,37 @@ That makes Ctrl-P Ctrl-Q the difference between keeping a sandbox and rebuilding
 
 ## Why a derived image
 
-`rocker/ml` gives us the R, Python and CUDA stack we actually work in, but it is not an
-OpenShell base image and ships no Claude Code. `sandboxes/rocker/Dockerfile` adds three
-things: the supervisor's prerequisites (`iproute2`, `nftables`, `iptables`, `dnsutils`,
-`openssh-sftp-server` — the supervisor shells out to `ip` and `nft` to build the sandbox
-network namespace, and `sftp-server` backs `sandbox upload`/`download`), the `sandbox` and
-`supervisor` users the privilege drop targets, and Node 22 with a current Claude Code.
+`rocker/ml-spatial` gives us the R, Python and CUDA stack plus the geospatial libraries
+(GDAL/PROJ/GEOS, sf, terra, stars, geopandas, rasterio) we actually work in, but it is not
+an OpenShell base image and ships no Claude Code. `sandboxes/compute/Dockerfile` adds five
+things:
+
+1. **The supervisor's prerequisites** — `iproute2`, `nftables`, `iptables`, `dnsutils`,
+   `openssh-sftp-server`. Not optional: the supervisor shells out to `ip` and `nft` to
+   build the sandbox network namespace, and `sftp-server` backs `sandbox
+   upload`/`download`. A stock image without them dies during provisioning with
+   `ContainerExited`.
+2. **The `sandbox` and `supervisor` users** the privilege drop targets. `run_as_user`
+   accepts the literal name `sandbox` or a numeric uid ≥ 1 — **never 0**, so nothing here
+   can be root. `no_new_privs` is set besides, so `sudo` and therefore apt are
+   unavailable at runtime no matter how the policy is written. That is why installation
+   belongs in this file, where the layers run as root and r2u still works.
+3. **Node 22 and a current Claude Code.**
+4. **A `profile.d` drop-in for `PATH`/`VIRTUAL_ENV`, and a writable venv at
+   `/sandbox/.venv`.** OpenShell builds a fresh environment for exec'd processes and
+   discards the image's `ENV`, so rocker's `PATH` does not survive and its Python is
+   reachable only at its full path; a `profile.d` file is read by the shell itself, so it
+   does. The venv exists because `/opt` is read-only — without it `pip install`
+   downloads a wheel and then dies on `EACCES`. `--system-site-packages` alone is not
+   enough either: `/opt/venv` is itself a venv whose `home = /usr/bin`, so a child venv's
+   "system" resolves to `/usr` and rocker's packages stay invisible. A `.pth` computed at
+   build time appends them after the local site-packages, so a local install shadows the
+   image's rather than the reverse.
+5. **Runtime R settings** — `bspm.sudo = FALSE`, since bspm routes `install.packages()`
+   through `sudo apt-get` for r2u binaries and that cannot work here, and
+   `R_LIBS_USER=/sandbox/R/library` so an install has somewhere writable to land.
+   Packages in `/sandbox` survive `stop`/`start`; `/usr` is read-only, so site-library
+   never is.
 
 A `CONFIG:DEGRADED — Failed to install bypass detection rules` warning at startup is
 **host-side, not image-side**: the `nft ... reject with icmp type port-unreachable` rule
@@ -190,7 +226,7 @@ Two mechanics worth knowing before building on this:
   [#2330](https://github.com/NVIDIA/OpenShell/issues/2330) proposes this credentials/
   endpoints split as a first-class feature; until then it is the manual recipe.
 - **One host:port is one credential domain**, so one scoped credential per sandbox. See the
-  header of `sandboxes/rocker/policy.yaml`.
+  header of `sandboxes/compute/policy.yaml`.
 
 `auth_style` in a profile (`bearer`, `basic`, …) does not change any of the above:
 substitution is driven by finding the placeholder, not by the declared style.

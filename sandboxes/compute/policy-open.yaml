@@ -13,9 +13,9 @@
 # rather than a standing permission -- reach for it when you are genuinely exploring and
 # do not yet know the dependencies, then rebuild the image with what you found.
 #
-# Adds over policy.yaml: cran (CRAN, P3M, and GitHub source installs) and pypi. The
-# GitHub content hosts here are L7 GET+HEAD, not bare L4 -- see the header of
-# sandboxes/rocker/policy.yaml for why that matters.
+# Adds over policy.yaml: cran (CRAN, P3M, Bioconductor, and GitHub source installs) and
+# pypi. The GitHub content hosts here are L7 GET+HEAD, never bare L4 -- see policy.yaml
+# for why that matters, and keep it that way for anything you add.
 
 version: 1
 filesystem_policy:
