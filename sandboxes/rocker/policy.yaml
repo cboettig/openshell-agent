@@ -77,6 +77,13 @@ filesystem_policy:
   - /app
   - /etc
   - /var/log
+  # /opt is NOT in the built-in default's list, but rocker keeps its Python there
+  # (VIRTUAL_ENV=/opt/venv, and PATH starts /opt/venv/bin). Landlock default-denies a
+  # path in neither list, so without this `python3` is "Permission denied" and the
+  # /opt/venv/bin/* entries in the pypi policy below can never fire -- the filesystem
+  # check happens before the proxy is consulted. Read-only, not read-write: pip should
+  # install into a venv under /sandbox, not mutate the image.
+  - /opt
   read_write:
   - /sandbox
   - /tmp
