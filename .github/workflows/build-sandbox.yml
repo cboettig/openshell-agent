@@ -74,11 +74,14 @@ jobs:
           # move than it saves, and GHA cache is capped at 10GB per repo anyway.
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
+      # The digest is the filename, with its "sha256:" prefix stripped --
+      # upload-artifact rejects a colon in a path. The merge job puts it back.
       - name: Export digest
         run: |
           mkdir -p /tmp/digests
-          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
-          echo "${{ matrix.platform }} -> ${{ steps.build.outputs.digest }}"
+          digest='${{ steps.build.outputs.digest }}'
+          touch "/tmp/digests/${digest#sha256:}"
+          echo "${{ matrix.platform }} -> ${digest}"
 
       - uses: actions/upload-artifact@v4
         with:
