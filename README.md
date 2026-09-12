@@ -180,9 +180,34 @@ openshell --version
 #    additions don't silently go missing (--policy REPLACES the default outright)
 openshell policy get <sandbox> --base -o json
 
-# 3. rebuild and recreate
-docker pull rocker/ml:latest
+# 3. rebuild and recreate. With OPENSHELL_IMAGE set, `os` uses the published
+#    image and this is just a pull; otherwise it rebuilds from the Dockerfile.
+docker pull rocker/ml-spatial:latest
 openshell sandbox delete dev && os
+```
+
+## The published image
+
+`.github/workflows/build-sandbox.yml` builds `sandboxes/compute/Dockerfile` for **amd64
+and arm64 on native runners** — `ubuntu-24.04` and `ubuntu-24.04-arm`, not QEMU, which a
+~10GB image would not tolerate — and publishes a manifest list to
+`ghcr.io/boettiger-lab/openshell-agent/compute`. It runs on a push that touches the
+Dockerfile, weekly, and on demand. Weekly matters: a current Claude Code is the whole
+reason for a derived image, and upstream's community base went stale exactly this way.
+
+Point `os` at it instead of building locally:
+
+```bash
+export OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:latest
+os                      # pulls rather than builds
+```
+
+Prefer a digest or the short-SHA tag for anything you want to reproduce later — a
+sandbox binds to its image at create time, so a pinned tag is what makes "which image was
+this sandbox built from" answerable months later:
+
+```bash
+export OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:a1b2c3d4e5f6
 ```
 
 Adding a sandbox means a new `sandboxes/<name>/` with its own `Dockerfile` and

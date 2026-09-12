@@ -25,6 +25,13 @@
 OPENSHELL_AGENT_DIR="${OPENSHELL_AGENT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # Which sandboxes/<name> to build from. One directory per sandbox, upstream's layout.
 OPENSHELL_SANDBOX="${OPENSHELL_SANDBOX:-compute}"
+# Set to a registry reference to use a published image instead of building locally, e.g.
+#   export OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:latest
+# The policy still comes from sandboxes/$OPENSHELL_SANDBOX/, since policy and image are
+# independent -- that is what lets one image carry both the locked and open flavors.
+# Prefer a digest or short-SHA tag over :latest for anything you want to reproduce; a
+# sandbox binds to its image at create time and never re-resolves it.
+OPENSHELL_IMAGE="${OPENSHELL_IMAGE:-}"
 
 # Attach to a running sandbox. Deliberately NOT `openshell sandbox connect`:
 # connect reattaches to the sandbox's canonical main process, and if that
@@ -58,7 +65,7 @@ openshell-session() {
             # No args -> no `--`, so openshell picks its own default shell.
             openshell sandbox create \
                 --name   "$name" \
-                --from   "$OPENSHELL_AGENT_DIR/sandboxes/$OPENSHELL_SANDBOX" \
+                --from   "${OPENSHELL_IMAGE:-$OPENSHELL_AGENT_DIR/sandboxes/$OPENSHELL_SANDBOX}" \
                 --policy "$OPENSHELL_AGENT_DIR/sandboxes/$OPENSHELL_SANDBOX/policy.yaml" \
                 --tty \
                 ${1+--} "$@"
