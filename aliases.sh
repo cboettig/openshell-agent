@@ -23,15 +23,28 @@
 
 # Where this repo lives; override to point at a checkout elsewhere.
 OPENSHELL_AGENT_DIR="${OPENSHELL_AGENT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
-# Which sandboxes/<name> to build from. One directory per sandbox, upstream's layout.
+# The image sandboxes are created from. Default is what CI builds and publishes to
+# GHCR for amd64 and arm64 -- see .github/workflows/build-sandbox.yml. Docker reuses
+# already-pulled layers, so this is a fast no-op once warm.
+#
+# Building locally is deliberately NOT the path here: the image is a build artifact
+# with public logs and a tag, not something hand-made on one machine. Change the
+# Dockerfile, push, let CI build it. Override to pin a specific build, which is what
+# you want for anything reproducible -- a sandbox binds to its image at create time
+# and never re-resolves it:
+#
+#   export OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:4678de9c
+OPENSHELL_IMAGE="${OPENSHELL_IMAGE:-ghcr.io/boettiger-lab/openshell-agent/compute:latest}"
+
+# Which sandboxes/<name>/ the POLICY comes from. Policy is independent of the image,
+# which is what lets one image carry both flavors.
 OPENSHELL_SANDBOX="${OPENSHELL_SANDBOX:-compute}"
-# Set to a registry reference to use a published image instead of building locally, e.g.
-#   export OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:latest
-# The policy still comes from sandboxes/$OPENSHELL_SANDBOX/, since policy and image are
-# independent -- that is what lets one image carry both the locked and open flavors.
-# Prefer a digest or short-SHA tag over :latest for anything you want to reproduce; a
-# sandbox binds to its image at create time and never re-resolves it.
-OPENSHELL_IMAGE="${OPENSHELL_IMAGE:-}"
+
+# The policy itself. Point at policy-open.yaml for the open flavor (CRAN and PyPI
+# reachable) instead of the locked default:
+#
+#   OPENSHELL_POLICY=$OPENSHELL_AGENT_DIR/sandboxes/compute/policy-open.yaml os scratch
+OPENSHELL_POLICY="${OPENSHELL_POLICY:-$OPENSHELL_AGENT_DIR/sandboxes/$OPENSHELL_SANDBOX/policy.yaml}"
 
 # Attach to a running sandbox. Deliberately NOT `openshell sandbox connect`:
 # connect reattaches to the sandbox's canonical main process, and if that
@@ -65,8 +78,8 @@ openshell-session() {
             # No args -> no `--`, so openshell picks its own default shell.
             openshell sandbox create \
                 --name   "$name" \
-                --from   "${OPENSHELL_IMAGE:-$OPENSHELL_AGENT_DIR/sandboxes/$OPENSHELL_SANDBOX}" \
-                --policy "$OPENSHELL_AGENT_DIR/sandboxes/$OPENSHELL_SANDBOX/policy.yaml" \
+                --from   "$OPENSHELL_IMAGE" \
+                --policy "$OPENSHELL_POLICY" \
                 --tty \
                 ${1+--} "$@"
             ;;

@@ -43,6 +43,17 @@ os dev -- claude  # Claude Code as the main process instead of a shell
 osl               # list sandboxes
 ```
 
+The first `os` **pulls** the published image rather than building anything; Docker reuses
+already-pulled layers, so it is a fast no-op once warm. Two knobs, both rarely needed:
+
+```bash
+# pin a specific build -- what you want for anything reproducible
+OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:4678de9c os
+
+# the open flavor: CRAN and PyPI reachable
+OPENSHELL_POLICY=$PWD/sandboxes/compute/policy-open.yaml os scratch
+```
+
 `os` dispatches on the sandbox's phase, so the same command works whether the sandbox is
 running, stopped, or doesn't exist yet. The equivalent raw commands:
 
@@ -51,7 +62,7 @@ running, stopped, or doesn't exist yet. The equivalent raw commands:
 # pick its own default shell; anything after `--` becomes the main process.
 openshell sandbox create \
   --name   dev \
-  --from   ./sandboxes/compute \
+  --from   ghcr.io/boettiger-lab/openshell-agent/compute:latest \
   --policy ./sandboxes/compute/policy.yaml \
   --tty \
   [-- claude]
@@ -180,9 +191,9 @@ openshell --version
 #    additions don't silently go missing (--policy REPLACES the default outright)
 openshell policy get <sandbox> --base -o json
 
-# 3. rebuild and recreate. With OPENSHELL_IMAGE set, `os` uses the published
-#    image and this is just a pull; otherwise it rebuilds from the Dockerfile.
-docker pull rocker/ml-spatial:latest
+# 3. recreate. `os` pulls, so a newer published image arrives here -- there is
+#    nothing to build. To get a NEW image first, change the Dockerfile and push;
+#    CI rebuilds on that, weekly, and on demand.
 openshell sandbox delete dev && os
 ```
 
@@ -195,19 +206,20 @@ and arm64 on native runners** — `ubuntu-24.04` and `ubuntu-24.04-arm`, not QEM
 Dockerfile, weekly, and on demand. Weekly matters: a current Claude Code is the whole
 reason for a derived image, and upstream's community base went stale exactly this way.
 
-Point `os` at it instead of building locally:
+The package is public, so a fresh machine needs no authentication — verified with an
+anonymous registry token, which resolves the manifest list to both architectures.
+
+**This is what `os` uses, and building locally is deliberately not a supported path.** The
+image is a build artifact with public logs and a tag, not something hand-made on one
+machine: change the Dockerfile, push, let CI build it. That keeps "which image is this"
+answerable, which a locally hot-patched image never is.
+
+Prefer the short-SHA tag over `:latest` for anything you want to reproduce later — a
+sandbox binds to its image at create time and never re-resolves it, so the pinned tag is
+what makes the question answerable months on:
 
 ```bash
-export OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:latest
-os                      # pulls rather than builds
-```
-
-Prefer a digest or the short-SHA tag for anything you want to reproduce later — a
-sandbox binds to its image at create time, so a pinned tag is what makes "which image was
-this sandbox built from" answerable months later:
-
-```bash
-export OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:a1b2c3d4e5f6
+export OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:4678de9c
 ```
 
 Adding a sandbox means a new `sandboxes/<name>/` with its own `Dockerfile` and
