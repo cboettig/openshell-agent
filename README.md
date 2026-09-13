@@ -145,9 +145,10 @@ needs `nft_reject_inet` loaded on the host. Upstream's base image hits it too. I
 non-fatal — proxy enforcement is unaffected, only the diagnostic that flags direct
 connection attempts. Clear it with `sudo modprobe nft_reject_inet`.
 
-It also overrides rocker's `HOME=/home/jovyan`. Left alone that beats the passwd entry, and
-Claude Code writes its credential somewhere the sandbox user cannot write and that is not
-part of the persisted workspace.
+`HOME` needs no `ENV` override, despite rocker setting `HOME=/home/jovyan`. OpenShell
+builds a fresh environment and discards the image's `ENV` entirely, so `HOME` comes from
+the passwd entry `useradd -d /sandbox` creates — which is where Claude Code's credential
+lands, inside the persisted workspace. An earlier `ENV HOME=/sandbox` here was dead code.
 
 The upstream community base is not an option: it was last built 2026-05-29 and has not been
 rebuilt since — `latest` and the newest tag `fffb6b2` are the same digest — so it ships

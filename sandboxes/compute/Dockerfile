@@ -82,8 +82,7 @@ RUN printf '\n# OpenShell: no root at runtime, so r2u/apt is unavailable.\noptio
     && printf 'R_LIBS_USER=/sandbox/R/library\n' >> /usr/lib/R/etc/Renviron.site \
     && mkdir -p /sandbox/R/library && chown -R sandbox:sandbox /sandbox/R
 
-# HOME is taken from the passwd entry above; this is belt-and-braces for any
-# path that does read the image ENV.
-ENV HOME=/sandbox
+# No ENV HOME here: OpenShell discards the image's environment, and HOME comes
+# from the passwd entry `useradd -d /sandbox` creates. Setting it was dead code.
 WORKDIR /sandbox
 USER sandbox
