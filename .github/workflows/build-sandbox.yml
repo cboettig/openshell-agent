@@ -112,13 +112,25 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Tagging, and why the commit tag is conditional: the weekly rebuild runs on
+      # an unchanged main, so tagging :<sha> unconditionally would move an existing
+      # tag to a different image -- silently breaking every pin to it, which is the
+      # one thing a pin exists to prevent. So :<sha> is written only by the push
+      # that introduced that commit, and every build also gets a dated tag that is
+      # unique to it. :latest always follows the newest build.
       - name: Create the manifest list
         working-directory: /tmp/digests
         run: |
-          docker buildx imagetools create \
-            --tag "${IMAGE}:latest" \
-            --tag "${IMAGE}:${GITHUB_SHA::12}" \
-            $(printf "${IMAGE}@sha256:%s " *)
+          set -euo pipefail
+          sources=$(printf "${IMAGE}@sha256:%s " *)
+          tags=( --tag "${IMAGE}:latest"
+                 --tag "${IMAGE}:${GITHUB_SHA::12}-$(date -u +%Y%m%d)" )
+          if [ "${{ github.event_name }}" = push ]; then
+            tags+=( --tag "${IMAGE}:${GITHUB_SHA::12}" )
+          else
+            echo "not a push: leaving ${IMAGE}:${GITHUB_SHA::12} pointing where it does"
+          fi
+          docker buildx imagetools create "${tags[@]}" $sources
 
       - name: Show what was published
         run: |

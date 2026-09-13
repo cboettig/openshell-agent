@@ -33,8 +33,18 @@ OPENSHELL_AGENT_DIR="${OPENSHELL_AGENT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")
 # you want for anything reproducible -- a sandbox binds to its image at create time
 # and never re-resolves it:
 #
-#   export OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:4678de9c
-OPENSHELL_IMAGE="${OPENSHELL_IMAGE:-ghcr.io/boettiger-lab/openshell-agent/compute:latest}"
+#   export OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:latest
+#
+# PINNED, not :latest, and deliberately so. A tag that moves caches locally under
+# the same name, so `os` would keep running a stale image while looking current --
+# that bit us once already. CI writes :<sha> only from the push that introduced the
+# commit, never from a scheduled rebuild, so this tag is immutable.
+#
+# Bump it when you want a newer build (a Dockerfile change, or the weekly rebuild
+# that picks up a newer Claude Code):
+#   git log -1 --format=%h            # the tag CI wrote, 12 chars
+#   docker buildx imagetools inspect ghcr.io/boettiger-lab/openshell-agent/compute:latest
+OPENSHELL_IMAGE="${OPENSHELL_IMAGE:-ghcr.io/boettiger-lab/openshell-agent/compute:1432c465d47a}"
 
 # Which sandboxes/<name>/ the POLICY comes from. Policy is independent of the image,
 # which is what lets one image carry both flavors.

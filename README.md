@@ -44,14 +44,15 @@ osl               # list sandboxes
 ```
 
 The first `os` **pulls** the published image rather than building anything; Docker reuses
-already-pulled layers, so it is a fast no-op once warm. Two knobs, both rarely needed:
+already-pulled layers, so it is a fast no-op once warm. The default is a **pinned commit
+tag**, not `:latest` — see below. Two knobs:
 
 ```bash
-# pin a specific build -- what you want for anything reproducible
-OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:4678de9c os
-
 # the open flavor: CRAN and PyPI reachable
 OPENSHELL_POLICY=$PWD/sandboxes/compute/policy-open.yaml os scratch
+
+# a different build, e.g. to try the newest before bumping the pin
+OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:latest os scratch
 ```
 
 `os` dispatches on the sandbox's phase, so the same command works whether the sandbox is
@@ -215,13 +216,34 @@ image is a build artifact with public logs and a tag, not something hand-made on
 machine: change the Dockerfile, push, let CI build it. That keeps "which image is this"
 answerable, which a locally hot-patched image never is.
 
-Prefer the short-SHA tag over `:latest` for anything you want to reproduce later — a
-sandbox binds to its image at create time and never re-resolves it, so the pinned tag is
-what makes the question answerable months on:
+### Why the default is pinned
+
+`aliases.sh` pins `OPENSHELL_IMAGE` to a commit tag rather than `:latest`. A moving tag
+caches locally under the same name, so `os` keeps running a stale image while looking
+current — that happened here: a verification "passed" against a cached `:latest` that was
+one build behind, and the result was meaningless. openshell prints a pull line when it
+fetches and stays silent when it doesn't, which is easy to miss.
+
+Tagging is arranged so the pin actually holds:
+
+| tag | written by | moves? |
+| --- | --- | --- |
+| `:latest` | every build | yes, always newest |
+| `:<sha>` | only the push that introduced that commit | **no** |
+| `:<sha>-<date>` | every build | no, unique per build |
+
+The weekly rebuild runs on an unchanged `main`, so writing `:<sha>` from it would move a
+tag that pins point at. It doesn't — it writes `:latest` and a dated tag instead.
+
+Bump the pin when you want a newer build:
 
 ```bash
-export OPENSHELL_IMAGE=ghcr.io/boettiger-lab/openshell-agent/compute:4678de9c
+git log -1 --format=%h                       # the tag CI wrote for this commit
+docker buildx imagetools inspect ghcr.io/boettiger-lab/openshell-agent/compute:latest
 ```
+
+A sandbox binds to its image at create time and never re-resolves it, so the pin is also
+what makes "which image is this sandbox" answerable months on.
 
 Adding a sandbox means a new `sandboxes/<name>/` with its own `Dockerfile` and
 `policy.yaml`; point `os` at it with `--from`/`--policy`, or set `OPENSHELL_SANDBOX`.
